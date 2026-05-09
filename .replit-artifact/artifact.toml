@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Planner Estoico"
+version = "1.0.0"
+id = "artifacts/planner-estoico"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25793
+
+[services.development]
+run = "pnpm --filter @workspace/planner-estoico run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/planner-estoico", "run", "build" ]
+publicDir = "artifacts/planner-estoico/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25793"
+BASE_PATH = "/"
