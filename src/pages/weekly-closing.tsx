@@ -102,8 +102,8 @@ export default function WeeklyClosingPage() {
 
   const loadWeeklyPlan = async () => {
     const { data, error } = await supabase
-      .from("weekly_plans")
-      .select("data")
+      .from("weekly_meta")
+      .select("plan")
       .eq("week_key", weekKey)
       .maybeSingle();
 
@@ -113,8 +113,8 @@ export default function WeeklyClosingPage() {
       return;
     }
 
-    if (data?.data) {
-      setWeeklyPlan(data.data as WeeklyPlan);
+    if (data?.plan) {
+      setWeeklyPlan(data.plan as WeeklyPlan);
     } else {
       setWeeklyPlan(EMPTY_WEEKLY_PLAN);
     }

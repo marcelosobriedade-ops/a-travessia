@@ -278,8 +278,8 @@ export default function Home() {
     }
 
     const { data, error } = await supabase
-      .from("weekly_plans")
-      .select("data")
+      .from("weekly_meta")
+      .select("plan")
       .eq("user_id", uid)
       .eq("week_key", weekKey)
       .maybeSingle();
@@ -290,8 +290,8 @@ export default function Home() {
       return;
     }
 
-    if (data?.data) {
-      setWeeklyPlan(data.data as WeeklyPlan);
+    if (data?.plan) {
+      setWeeklyPlan(data.plan as WeeklyPlan);
     } else {
       setWeeklyPlan(EMPTY_WEEKLY_PLAN);
     }

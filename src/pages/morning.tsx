@@ -155,8 +155,8 @@ export default function Morning() {
     }
 
     const { data, error } = await supabase
-      .from("weekly_plans")
-      .select("data")
+      .from("weekly_meta")
+      .select("plan")
       .eq("user_id", uid)
       .eq("week_key", weekKey)
       .maybeSingle();
@@ -169,7 +169,7 @@ export default function Morning() {
       return;
     }
 
-    const plan = data?.data ?? null;
+    const plan = data?.plan ?? null;
     setWeeklyPlan(plan);
 
     const today = new Date(dateKey + "T12:00:00");
@@ -325,11 +325,11 @@ export default function Morning() {
     setWeeklyPlan(nextPlan);
     setPendingProofs(nextProofs.filter((proof) => !proof.checked));
 
-    const { error } = await supabase.from("weekly_plans").upsert(
+    const { error } = await supabase.from("weekly_meta").upsert(
       {
         week_key: weekKey,
         user_id: userId,
-        data: nextPlan,
+        plan: nextPlan,
       },
       {
         onConflict: "user_id,week_key",

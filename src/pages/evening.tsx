@@ -106,8 +106,8 @@ export default function Evening() {
     }
 
     const { data, error } = await supabase
-      .from("weekly_plans")
-      .select("data")
+      .from("weekly_meta")
+      .select("plan")
       .eq("user_id", uid)
       .eq("week_key", weekKey)
       .maybeSingle();
@@ -120,7 +120,7 @@ export default function Evening() {
       return;
     }
 
-    const plan = data?.data ?? null;
+    const plan = data?.plan ?? null;
     setWeeklyPlan(plan);
 
     const today = new Date(dateKey + "T12:00:00");
