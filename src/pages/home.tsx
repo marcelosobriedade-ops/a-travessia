@@ -1009,7 +1009,10 @@ export default function Home() {
             </>
           )}
 
-          <section className="mb-5 rounded-[28px] border border-border/50 bg-card p-4 shadow-sm">
+          <section
+            onClick={() => (window.location.href = "/tasks")}
+            className="mb-5 cursor-pointer rounded-[28px] border border-border/50 bg-card p-4 shadow-sm transition-transform hover:scale-[1.01]"
+          >
             <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
                 <ChevronRight className="h-7 w-7 text-primary" />
