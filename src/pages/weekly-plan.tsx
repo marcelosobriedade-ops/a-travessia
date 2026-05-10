@@ -114,8 +114,8 @@ export default function WeeklyPlanPage() {
 
         const [{ data, error }, previousMeta] = await Promise.all([
           supabase
-            .from("weekly_plans")
-            .select("data")
+            .from("weekly_meta")
+            .select("plan")
             .eq("user_id", uid)
             .eq("week_key", weekKey)
             .maybeSingle(),
@@ -135,13 +135,15 @@ export default function WeeklyPlanPage() {
         if (cancelled) return;
 
         setPlan(
-          data?.data ? normalizeWeeklyPlan(data.data) : EMPTY_WEEKLY_PLAN,
+          data?.plan ? normalizeWeeklyPlan(data.plan) : EMPTY_WEEKLY_PLAN,
         );
+
         setPreviousCycleFocus(
           typeof previousMeta?.closing?.nextFocus === "string"
             ? previousMeta.closing.nextFocus.trim()
             : "",
         );
+
         setHasLoaded(true);
       } catch (error) {
         console.error("Erro ao carregar plano semanal:", error);
@@ -167,11 +169,11 @@ export default function WeeklyPlanPage() {
 
     const timeoutId = window.setTimeout(async () => {
       try {
-        const { error } = await supabase.from("weekly_plans").upsert(
+        const { error } = await supabase.from("weekly_meta").upsert(
           {
             week_key: weekKey,
             user_id: userId,
-            data: plan,
+            plan: plan,
           },
           {
             onConflict: "user_id,week_key",
@@ -288,11 +290,9 @@ export default function WeeklyPlanPage() {
           )}
 
           <section className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-            <div>
-              <h2 className="text-lg font-serif text-foreground">
-                1. Visão — daqui a 7 dias
-              </h2>
-            </div>
+            <h2 className="text-lg font-serif text-foreground">
+              1. Visão — daqui a 7 dias
+            </h2>
 
             <textarea
               value={plan.change}
@@ -302,11 +302,9 @@ export default function WeeklyPlanPage() {
           </section>
 
           <section className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-            <div>
-              <h2 className="text-lg font-serif text-foreground">
-                2. Provas da semana
-              </h2>
-            </div>
+            <h2 className="text-lg font-serif text-foreground">
+              2. Provas da semana
+            </h2>
 
             <div className="space-y-3">
               <div className="flex gap-2">
@@ -380,11 +378,9 @@ export default function WeeklyPlanPage() {
           </section>
 
           <section className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-            <div>
-              <h2 className="text-lg font-serif text-foreground">
-                3. Distribuir na semana
-              </h2>
-            </div>
+            <h2 className="text-lg font-serif text-foreground">
+              3. Distribuir na semana
+            </h2>
 
             <div className="rounded-2xl border border-border/40 bg-background p-4 space-y-4">
               <div className="flex items-center justify-between gap-3">
