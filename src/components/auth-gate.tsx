@@ -8,13 +8,22 @@ export function AuthGate({ children }: any) {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user);
+    // pega sessão atual
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
       setLoading(false);
-    };
+    });
 
-    checkUser();
+    // escuta mudanças (ESSENCIAL)
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+      },
+    );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
