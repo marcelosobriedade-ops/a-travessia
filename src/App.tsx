@@ -18,67 +18,32 @@ import { AuthGate } from "./components/auth-gate";
 
 function App() {
   return (
-    <AuthGate>
-      <Switch>
-        {/* Auth */}
-        <Route path="/auth" component={AuthPage} />
+    <Switch>
+      {/* ROTA LIVRE */}
+      <Route path="/auth" component={AuthPage} />
 
-        {/* Home */}
-        <Route path="/" component={HomePage} />
-
-        {/* Core */}
-        <Route path="/sos" component={SosPage} />
-
-        {/* Histórico */}
-        <Route path="/history" component={HistoryPage} />
-        <Route path="/historico" component={HistoryPage} />
-
-        {/* Ajustes */}
-        <Route path="/settings" component={SettingsPage} />
-        <Route path="/ajustes" component={SettingsPage} />
-
-        {/* Tarefas */}
-        <Route path="/tasks" component={TasksPage} />
-        <Route path="/tarefas" component={TasksPage} />
-
-        {/* Hábitos */}
-        <Route path="/habits" component={HabitsPage} />
-        <Route path="/habitos" component={HabitsPage} />
-
-        {/* Financeiro (IMPORTANTE – corrigido) */}
-        <Route path="/financial" component={FinancialPage} />
-        <Route path="/financas" component={FinancialPage} />
-        <Route path="/finanças" component={FinancialPage} />
-        <Route path="/financeiro" component={FinancialPage} />
-
-        {/* Pessoas */}
-        <Route path="/people" component={PeoplePage} />
-        <Route path="/pessoas" component={PeoplePage} />
-
-        {/* Emoções */}
-        <Route path="/emotions" component={EmotionsPage} />
-        <Route path="/emocoes" component={EmotionsPage} />
-
-        {/* Manhã */}
-        <Route path="/morning" component={MorningPage} />
-        <Route path="/manha" component={MorningPage} />
-        <Route path="/manhã" component={MorningPage} />
-
-        {/* Noite */}
-        <Route path="/evening" component={EveningPage} />
-        <Route path="/noite" component={EveningPage} />
-
-        {/* Semana */}
-        <Route path="/weekly-plan" component={WeeklyPlanPage} />
-        <Route path="/plano-semanal" component={WeeklyPlanPage} />
-
-        <Route path="/weekly-closing" component={WeeklyClosingPage} />
-        <Route path="/fechamento-semanal" component={WeeklyClosingPage} />
-
-        {/* Fallback */}
-        <Route component={NotFound} />
-      </Switch>
-    </AuthGate>
+      {/* ROTAS PROTEGIDAS */}
+      <Route>
+        <AuthGate>
+          <Switch>
+            <Route path="/" component={HomePage} />
+            <Route path="/sos" component={SosPage} />
+            <Route path="/history" component={HistoryPage} />
+            <Route path="/settings" component={SettingsPage} />
+            <Route path="/tasks" component={TasksPage} />
+            <Route path="/habits" component={HabitsPage} />
+            <Route path="/financial" component={FinancialPage} />
+            <Route path="/people" component={PeoplePage} />
+            <Route path="/emotions" component={EmotionsPage} />
+            <Route path="/morning" component={MorningPage} />
+            <Route path="/evening" component={EveningPage} />
+            <Route path="/weekly-plan" component={WeeklyPlanPage} />
+            <Route path="/weekly-closing" component={WeeklyClosingPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </AuthGate>
+      </Route>
+    </Switch>
   );
 }
 
