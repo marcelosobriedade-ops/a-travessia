@@ -24,6 +24,7 @@ import {
   Flame,
   SunMedium,
   HeartPulse,
+  AlertTriangle,
 } from "lucide-react";
 import {
   getCurrentUserId,
@@ -44,7 +45,7 @@ type ProofItem = {
 };
 
 type Period = "morning" | "afternoon" | "evening";
-type StorageMode = "supabase" | "local";
+type LoadStatus = "loading" | "ready" | "error";
 
 interface CheckIn {
   emotion: string | null;
@@ -108,15 +109,6 @@ function isLowState(value: string | null | undefined) {
   return value === "muito mal" || value === "mal";
 }
 
-function safeJsonParse<T>(raw: string | null, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function normalizePriorities(value: any): [string, string, string] {
   const arr = Array.isArray(value) ? value : [];
   return [
@@ -171,68 +163,20 @@ function normalizeTasks(value: any): Task[] {
   }));
 }
 
-function normalizeCompleted(value: any): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => typeof item === "string");
-}
-
-function getLegacyPreviousWeekClosingFocus(dateKey: string) {
-  try {
-    const currentDate = new Date(dateKey + "T12:00:00");
-    const previousWeekDate = new Date(currentDate);
-    previousWeekDate.setDate(previousWeekDate.getDate() - 7);
-    const previousWeekDateKey = previousWeekDate.toISOString().slice(0, 10);
-    const previousWeekKey = getWeekKeyFromDate(previousWeekDateKey);
-
-    const raw = localStorage.getItem(`weekly-closing-${previousWeekKey}`);
-    if (!raw) return "";
-
-    const parsed = JSON.parse(raw);
-    return typeof parsed?.nextFocus === "string" ? parsed.nextFocus.trim() : "";
-  } catch (error) {
-    console.error("Erro ao ler foco do ciclo anterior:", error);
-    return "";
-  }
-}
-
-function getLegacyData(dateKey: string, weekKey: string) {
-  const morning = normalizeMorning(
-    safeJsonParse(localStorage.getItem(`${dateKey}-morning-ritual`), {}),
-  );
-
-  const emotions = normalizeEmotions(
-    safeJsonParse(
-      localStorage.getItem(`${dateKey}-emotions`),
-      defaultEmotionsState,
-    ),
-  );
-
-  const tasks = normalizeTasks(
-    safeJsonParse(localStorage.getItem(`${dateKey}-tasks`), []),
-  );
-
-  const habitsCompleted = normalizeCompleted(
-    safeJsonParse(localStorage.getItem(`${dateKey}-habits-completed`), []),
-  );
-
-  const closed = safeJsonParse(
-    localStorage.getItem(`${dateKey}-closed`),
-    false,
-  );
-
-  const weekVirtue = safeJsonParse(
-    localStorage.getItem(`planner-week-virtue-${weekKey}`),
-    "",
-  );
-
+function normalizeWeeklyPlan(value: any): WeeklyPlan {
   return {
-    morning,
-    emotions,
-    tasks,
-    habitsCompleted,
-    closed: Boolean(closed),
-    weekVirtue: typeof weekVirtue === "string" ? weekVirtue : "",
-    previousCycleFocus: getLegacyPreviousWeekClosingFocus(dateKey),
+    ...EMPTY_WEEKLY_PLAN,
+    change: typeof value?.change === "string" ? value.change : "",
+    proofs: typeof value?.proofs === "string" ? value.proofs : "",
+    risks: typeof value?.risks === "string" ? value.risks : "",
+    prevention: typeof value?.prevention === "string" ? value.prevention : "",
+    sunday: typeof value?.sunday === "string" ? value.sunday : "",
+    monday: typeof value?.monday === "string" ? value.monday : "",
+    tuesday: typeof value?.tuesday === "string" ? value.tuesday : "",
+    wednesday: typeof value?.wednesday === "string" ? value.wednesday : "",
+    thursday: typeof value?.thursday === "string" ? value.thursday : "",
+    friday: typeof value?.friday === "string" ? value.friday : "",
+    saturday: typeof value?.saturday === "string" ? value.saturday : "",
   };
 }
 
@@ -256,242 +200,102 @@ export default function Home() {
   const [showCloseSuccess, setShowCloseSuccess] = useState(false);
 
   const [userId, setUserId] = useState<string | null>(null);
-  const [storageMode, setStorageMode] = useState<StorageMode>("local");
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [status, setStatus] = useState<LoadStatus>("loading");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [savingClosed, setSavingClosed] = useState(false);
 
   useEffect(() => {
-    const syncHour = () => {
-      setCurrentHour(new Date().getHours());
-    };
-
+    const syncHour = () => setCurrentHour(new Date().getHours());
     syncHour();
 
     const intervalId = window.setInterval(syncHour, 60000);
-
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const loadWeeklyPlan = async (uid: string | null) => {
-    if (!uid) {
-      setWeeklyPlan(EMPTY_WEEKLY_PLAN);
-      return;
+  const loadHomeData = async (silent = false) => {
+    if (!silent) {
+      setStatus("loading");
     }
 
-    const { data, error } = await supabase
-      .from("weekly_meta")
-      .select("plan")
-      .eq("user_id", uid)
-      .eq("week_key", weekKey)
-      .maybeSingle();
+    setErrorMessage("");
 
-    if (error) {
-      console.error("Erro ao carregar plano semanal na Home:", error);
-      setWeeklyPlan(EMPTY_WEEKLY_PLAN);
-      return;
-    }
+    try {
+      const uid = await getCurrentUserId();
+      setUserId(uid);
 
-    if (data?.plan) {
-      setWeeklyPlan(data.plan as WeeklyPlan);
-    } else {
-      setWeeklyPlan(EMPTY_WEEKLY_PLAN);
+      const [daily, weeklyMetaResult, weeklyPlanResult] = await Promise.all([
+        getDailyRecord(uid, dateKey),
+        getWeeklyMeta(uid, weekKey),
+        supabase
+          .from("weekly_meta")
+          .select("plan")
+          .eq("user_id", uid)
+          .eq("week_key", weekKey)
+          .maybeSingle(),
+      ]);
+
+      if (weeklyPlanResult.error) throw weeklyPlanResult.error;
+
+      setMorningRitual(normalizeMorning(daily.morning));
+      setEmotions(normalizeEmotions(daily.emotions));
+      setTasks(normalizeTasks(daily.tasks));
+      setDayClosed(Boolean(daily.closed));
+
+      setWeekVirtue(
+        typeof weeklyMetaResult?.virtue === "string"
+          ? weeklyMetaResult.virtue
+          : "",
+      );
+
+      setPreviousCycleFocus(
+        typeof weeklyMetaResult?.closing?.nextFocus === "string"
+          ? weeklyMetaResult.closing.nextFocus.trim()
+          : "",
+      );
+
+      setWeeklyPlan(
+        weeklyPlanResult.data?.plan
+          ? normalizeWeeklyPlan(weeklyPlanResult.data.plan)
+          : EMPTY_WEEKLY_PLAN,
+      );
+
+      setStatus("ready");
+    } catch (error: any) {
+      console.error("Erro ao carregar Home:", error);
+      setErrorMessage(error?.message || "Não foi possível carregar a Home.");
+      setStatus("error");
     }
   };
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadData = async () => {
-      setHasLoaded(false);
+    const run = async () => {
+      if (cancelled) return;
+      await loadHomeData(false);
+    };
 
-      try {
-        const uid = await getCurrentUserId();
-        if (cancelled) return;
+    run();
 
-        setUserId(uid);
-        setStorageMode("supabase");
+    const handleFocus = () => {
+      loadHomeData(true);
+    };
 
-        const [daily, weeklyMeta] = await Promise.all([
-          getDailyRecord(uid, dateKey),
-          getWeeklyMeta(uid, weekKey),
-        ]);
-
-        if (cancelled) return;
-
-        const legacy = getLegacyData(dateKey, weekKey);
-
-        let nextMorning = normalizeMorning(daily.morning);
-        let nextEmotions = normalizeEmotions(daily.emotions);
-        let nextTasks = normalizeTasks(daily.tasks);
-        let nextClosed = Boolean(daily.closed);
-        let nextWeekVirtue =
-          typeof weeklyMeta?.virtue === "string" ? weeklyMeta.virtue : "";
-        let nextPreviousCycleFocus =
-          typeof weeklyMeta?.closing?.nextFocus === "string"
-            ? weeklyMeta.closing.nextFocus
-            : "";
-
-        let shouldSaveDaily = false;
-
-        const hasSupabaseMorning = Boolean(
-          nextMorning.mode ||
-            nextMorning.feeling ||
-            nextMorning.actions ||
-            nextMorning.challenges ||
-            nextMorning.control ||
-            nextMorning.priorities.some((item) => item.trim()),
-        );
-
-        if (!hasSupabaseMorning) {
-          const hasLegacyMorning = Boolean(
-            legacy.morning.mode ||
-              legacy.morning.feeling ||
-              legacy.morning.actions ||
-              legacy.morning.challenges ||
-              legacy.morning.control ||
-              legacy.morning.priorities.some((item) => item.trim()),
-          );
-
-          if (hasLegacyMorning) {
-            nextMorning = legacy.morning;
-            shouldSaveDaily = true;
-          }
-        }
-
-        const hasSupabaseEmotions = Boolean(
-          nextEmotions.morning.emotion ||
-            nextEmotions.afternoon.emotion ||
-            nextEmotions.evening.emotion ||
-            nextEmotions.morning.observations ||
-            nextEmotions.afternoon.observations ||
-            nextEmotions.evening.observations,
-        );
-
-        if (!hasSupabaseEmotions) {
-          const hasLegacyEmotions = Boolean(
-            legacy.emotions.morning.emotion ||
-              legacy.emotions.afternoon.emotion ||
-              legacy.emotions.evening.emotion ||
-              legacy.emotions.morning.observations ||
-              legacy.emotions.afternoon.observations ||
-              legacy.emotions.evening.observations,
-          );
-
-          if (hasLegacyEmotions) {
-            nextEmotions = legacy.emotions;
-            shouldSaveDaily = true;
-          }
-        }
-
-        if (nextTasks.length === 0 && legacy.tasks.length > 0) {
-          nextTasks = legacy.tasks;
-          shouldSaveDaily = true;
-        }
-
-        if (!nextClosed && legacy.closed) {
-          nextClosed = true;
-          shouldSaveDaily = true;
-        }
-
-        if (shouldSaveDaily) {
-          await saveDailyRecord(uid, dateKey, {
-            morning: nextMorning,
-            emotions: nextEmotions,
-            tasks: nextTasks,
-            closed: nextClosed,
-          });
-        }
-
-        if (!nextWeekVirtue.trim() && legacy.weekVirtue.trim()) {
-          setWeekVirtue(legacy.weekVirtue);
-        } else {
-          setWeekVirtue(nextWeekVirtue);
-        }
-
-        if (
-          !nextPreviousCycleFocus.trim() &&
-          legacy.previousCycleFocus.trim()
-        ) {
-          setPreviousCycleFocus(legacy.previousCycleFocus);
-        } else {
-          setPreviousCycleFocus(nextPreviousCycleFocus);
-        }
-
-        if (cancelled) return;
-
-        setMorningRitual(nextMorning);
-        setEmotions(nextEmotions);
-        setTasks(nextTasks);
-        setDayClosed(nextClosed);
-
-        await loadWeeklyPlan(uid);
-
-        localStorage.setItem(`${dateKey}-tasks`, JSON.stringify(nextTasks));
-        localStorage.setItem(
-          `${dateKey}-morning-ritual`,
-          JSON.stringify(nextMorning),
-        );
-        localStorage.setItem(
-          `${dateKey}-emotions`,
-          JSON.stringify(nextEmotions),
-        );
-        localStorage.setItem(`${dateKey}-closed`, JSON.stringify(nextClosed));
-        if (weekVirtue.trim()) {
-          localStorage.setItem(
-            `planner-week-virtue-${weekKey}`,
-            JSON.stringify(weekVirtue),
-          );
-        }
-
-        setHasLoaded(true);
-      } catch (error) {
-        console.warn(
-          "Sem usuário autenticado. Home está usando armazenamento local.",
-          error,
-        );
-
-        if (cancelled) return;
-
-        const legacy = getLegacyData(dateKey, weekKey);
-
-        setUserId(null);
-        setStorageMode("local");
-        setMorningRitual(legacy.morning);
-        setEmotions(legacy.emotions);
-        setTasks(legacy.tasks);
-        setDayClosed(legacy.closed);
-        setWeekVirtue(legacy.weekVirtue);
-        setPreviousCycleFocus(legacy.previousCycleFocus);
-        setWeeklyPlan(EMPTY_WEEKLY_PLAN);
-        setHasLoaded(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadHomeData(true);
       }
     };
 
-    loadData();
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [dateKey, weekKey]);
-
-  useEffect(() => {
-    if (!hasLoaded) return;
-
-    const saveClosed = async () => {
-      try {
-        if (storageMode === "supabase" && userId) {
-          await saveDailyRecord(userId, dateKey, {
-            closed: dayClosed,
-          });
-        }
-
-        localStorage.setItem(`${dateKey}-closed`, JSON.stringify(dayClosed));
-      } catch (error) {
-        console.error("Erro ao salvar fechamento do dia:", error);
-      }
-    };
-
-    saveClosed();
-  }, [dayClosed, hasLoaded, storageMode, userId, dateKey]);
 
   const weeklyPlanStatus = getWeeklyPlanStatus(weeklyPlan);
   const stoicQuote = getStoicQuoteByDate(dateKey);
@@ -606,10 +410,28 @@ export default function Home() {
     window.location.href = `${import.meta.env.BASE_URL}fechamento-semanal`;
   };
 
-  const handleCloseDay = () => {
-    setDayClosed(true);
-    setShowCloseSuccess(true);
-    setTimeout(() => setShowCloseSuccess(false), 2500);
+  const handleCloseDay = async () => {
+    if (!userId) {
+      setStatus("error");
+      setErrorMessage("Usuário não autenticado. Faça login novamente.");
+      return;
+    }
+
+    setSavingClosed(true);
+    setErrorMessage("");
+
+    try {
+      await saveDailyRecord(userId, dateKey, { closed: true });
+      setDayClosed(true);
+      setShowCloseSuccess(true);
+      setTimeout(() => setShowCloseSuccess(false), 2500);
+    } catch (error: any) {
+      console.error("Erro ao encerrar dia:", error);
+      setStatus("error");
+      setErrorMessage(error?.message || "Erro ao encerrar dia.");
+    } finally {
+      setSavingClosed(false);
+    }
   };
 
   const progressPercent =
@@ -691,6 +513,24 @@ export default function Home() {
               </div>
             )}
           </header>
+
+          {status === "loading" && (
+            <section className="mb-4 rounded-[24px] border border-border/50 bg-card px-4 py-4 text-sm text-muted-foreground shadow-sm">
+              Carregando dados do Supabase...
+            </section>
+          )}
+
+          {status === "error" && (
+            <section className="mb-4 rounded-[24px] border border-destructive/30 bg-destructive/10 px-4 py-4 text-sm text-destructive shadow-sm">
+              <div className="flex gap-3">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-medium">Erro ao carregar dados</p>
+                  <p className="mt-1">{errorMessage}</p>
+                </div>
+              </div>
+            </section>
+          )}
 
           {shouldHighlightSos && (
             <section className="mb-4 rounded-[28px] border border-primary/20 bg-primary/5 p-4 shadow-sm">
@@ -1009,28 +849,27 @@ export default function Home() {
             </>
           )}
 
-          <section
-            onClick={() => (window.location.href = "/tasks")}
-            className="mb-5 cursor-pointer rounded-[28px] border border-border/50 bg-card p-4 shadow-sm transition-transform hover:scale-[1.01]"
-          >
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
-                <ChevronRight className="h-7 w-7 text-primary" />
+          <Link href="/tasks">
+            <section className="mb-5 cursor-pointer rounded-[28px] border border-border/50 bg-card p-4 shadow-sm transition-transform hover:scale-[1.01]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                  <ChevronRight className="h-7 w-7 text-primary" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-primary">Trilha de hoje</p>
+
+                  <p className="mt-2 font-serif text-2xl leading-snug text-foreground">
+                    {nextTrailStep}
+                  </p>
+
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {nextTrailHint}
+                  </p>
+                </div>
               </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-primary">Trilha de hoje</p>
-
-                <p className="mt-2 font-serif text-2xl leading-snug text-foreground">
-                  {nextTrailStep}
-                </p>
-
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {nextTrailHint}
-                </p>
-              </div>
-            </div>
-          </section>
+            </section>
+          </Link>
 
           <div className="mt-3 space-y-3">
             {showCloseSuccess && (
@@ -1049,9 +888,10 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleCloseDay}
-                className="w-full rounded-2xl border border-primary/30 px-4 py-3 text-sm text-primary"
+                disabled={savingClosed || !userId}
+                className="w-full rounded-2xl border border-primary/30 px-4 py-3 text-sm text-primary disabled:opacity-60"
               >
-                Encerrar dia
+                {savingClosed ? "Encerrando..." : "Encerrar dia"}
               </button>
             )}
           </div>
