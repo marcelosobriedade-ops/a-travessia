@@ -2,11 +2,11 @@ import { supabase } from "@/lib/supabase";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Trash2,
   Check,
+  Save,
+  AlertTriangle,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { getCurrentDateKey } from "@/lib/date";
@@ -20,29 +20,12 @@ import {
 } from "@/lib/weekly-plan";
 import { getCurrentUserId, getWeeklyMeta } from "@/lib/user-data";
 
-type WeekDayKey =
-  | "sunday"
-  | "monday"
-  | "tuesday"
-  | "wednesday"
-  | "thursday"
-  | "friday"
-  | "saturday";
-
 type ProofItem = {
   text: string;
   checked: boolean;
 };
 
-const DAY_OPTIONS: { value: WeekDayKey; label: string }[] = [
-  { value: "sunday", label: "Dom" },
-  { value: "monday", label: "Seg" },
-  { value: "tuesday", label: "Ter" },
-  { value: "wednesday", label: "Qua" },
-  { value: "thursday", label: "Qui" },
-  { value: "friday", label: "Sex" },
-  { value: "saturday", label: "Sáb" },
-];
+type SaveStatus = "idle" | "loading" | "saving" | "saved" | "error";
 
 function parseProofs(proofs: string): ProofItem[] {
   if (!proofs?.trim()) return [];
@@ -77,17 +60,18 @@ function getPreviousWeekKey(weekKey: string) {
 function normalizeWeeklyPlan(value: any): WeeklyPlan {
   return {
     ...EMPTY_WEEKLY_PLAN,
-    change: value?.change ?? "",
-    proofs: value?.proofs ?? "",
-    risks: value?.risks ?? "",
-    prevention: value?.prevention ?? "",
-    sunday: value?.sunday ?? "",
-    monday: value?.monday ?? "",
-    tuesday: value?.tuesday ?? "",
-    wednesday: value?.wednesday ?? "",
-    thursday: value?.thursday ?? "",
-    friday: value?.friday ?? "",
-    saturday: value?.saturday ?? "",
+    change: typeof value?.change === "string" ? value.change : "",
+    proofs: typeof value?.proofs === "string" ? value.proofs : "",
+    risks: typeof value?.risks === "string" ? value.risks : "",
+    prevention: typeof value?.prevention === "string" ? value.prevention : "",
+
+    sunday: typeof value?.sunday === "string" ? value.sunday : "",
+    monday: typeof value?.monday === "string" ? value.monday : "",
+    tuesday: typeof value?.tuesday === "string" ? value.tuesday : "",
+    wednesday: typeof value?.wednesday === "string" ? value.wednesday : "",
+    thursday: typeof value?.thursday === "string" ? value.thursday : "",
+    friday: typeof value?.friday === "string" ? value.friday : "",
+    saturday: typeof value?.saturday === "string" ? value.saturday : "",
   };
 }
 
@@ -102,19 +86,22 @@ export default function WeeklyPlanPage() {
   const previousWeekKey = useMemo(() => getPreviousWeekKey(weekKey), [weekKey]);
 
   const [plan, setPlan] = useState<WeeklyPlan>(EMPTY_WEEKLY_PLAN);
-  const [selectedDay, setSelectedDay] = useState<WeekDayKey>("sunday");
   const [newProof, setNewProof] = useState("");
   const [previousCycleFocus, setPreviousCycleFocus] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [status, setStatus] = useState<SaveStatus>("loading");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [dirty, setDirty] = useState(false);
 
-  const status = getWeeklyPlanStatus(plan);
+  const weeklyPlanStatus = getWeeklyPlanStatus(plan);
+  const proofsList = parseProofs(plan.proofs);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadPlan = async () => {
-      setHasLoaded(false);
+      setStatus("loading");
+      setErrorMessage("");
 
       try {
         const uid = await getCurrentUserId();
@@ -132,16 +119,7 @@ export default function WeeklyPlanPage() {
           getWeeklyMeta(uid, previousWeekKey),
         ]);
 
-        if (error) {
-          console.error("Erro ao carregar plano:", error);
-          if (!cancelled) {
-            setPlan(EMPTY_WEEKLY_PLAN);
-            setPreviousCycleFocus("");
-            setHasLoaded(true);
-          }
-          return;
-        }
-
+        if (error) throw error;
         if (cancelled) return;
 
         setPlan(
@@ -154,15 +132,16 @@ export default function WeeklyPlanPage() {
             : "",
         );
 
-        setHasLoaded(true);
-      } catch (error) {
+        setDirty(false);
+        setStatus("idle");
+      } catch (error: any) {
         console.error("Erro ao carregar plano semanal:", error);
         if (cancelled) return;
 
-        setUserId(null);
         setPlan(EMPTY_WEEKLY_PLAN);
         setPreviousCycleFocus("");
-        setHasLoaded(true);
+        setErrorMessage(error?.message || "Erro ao carregar plano semanal.");
+        setStatus("error");
       }
     };
 
@@ -173,42 +152,47 @@ export default function WeeklyPlanPage() {
     };
   }, [weekKey, previousWeekKey]);
 
-  useEffect(() => {
-    if (!hasLoaded) return;
-    if (!userId) return;
-
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        const { error } = await supabase.from("weekly_meta").upsert(
-          {
-            week_key: weekKey,
-            user_id: userId,
-            plan,
-          },
-          {
-            onConflict: "user_id,week_key",
-          },
-        );
-
-        if (error) {
-          console.error("Erro ao salvar plano:", error);
-        }
-      } catch (error) {
-        console.error("Erro ao salvar plano semanal:", error);
-      }
-    }, 350);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [plan, hasLoaded, userId, weekKey]);
-
   const updatePlan = (patch: Partial<WeeklyPlan>) => {
     setPlan((prev) => ({
       ...prev,
       ...patch,
     }));
+    setDirty(true);
+    if (status === "saved") setStatus("idle");
   };
 
-  const proofsList = parseProofs(plan.proofs);
+  const savePlan = async () => {
+    if (!userId) {
+      setStatus("error");
+      setErrorMessage("Usuário não autenticado. Faça login novamente.");
+      return;
+    }
+
+    setStatus("saving");
+    setErrorMessage("");
+
+    try {
+      const { error } = await supabase.from("weekly_meta").upsert(
+        {
+          week_key: weekKey,
+          user_id: userId,
+          plan,
+        },
+        {
+          onConflict: "user_id,week_key",
+        },
+      );
+
+      if (error) throw error;
+
+      setDirty(false);
+      setStatus("saved");
+    } catch (error: any) {
+      console.error("Erro ao salvar plano semanal:", error);
+      setStatus("error");
+      setErrorMessage(error?.message || "Erro ao salvar plano semanal.");
+    }
+  };
 
   const addProof = () => {
     const value = newProof.trim();
@@ -241,28 +225,15 @@ export default function WeeklyPlanPage() {
     updatePlan({ proofs: nextProofs });
   };
 
-  const selectedDayIndex = DAY_OPTIONS.findIndex(
-    (day) => day.value === selectedDay,
-  );
-
-  const goToPreviousWeekDay = () => {
-    const previousIndex =
-      selectedDayIndex === 0 ? DAY_OPTIONS.length - 1 : selectedDayIndex - 1;
-    setSelectedDay(DAY_OPTIONS[previousIndex].value);
+  const goToWeeklyClosing = () => {
+    window.location.href = `${import.meta.env.BASE_URL}fechamento-semanal`;
   };
 
-  const goToNextWeekDay = () => {
-    const nextIndex =
-      selectedDayIndex === DAY_OPTIONS.length - 1 ? 0 : selectedDayIndex + 1;
-    setSelectedDay(DAY_OPTIONS[nextIndex].value);
-  };
-
-  const selectedDayLabel =
-    DAY_OPTIONS.find((day) => day.value === selectedDay)?.label || "Dom";
+  const isBusy = status === "loading" || status === "saving";
 
   return (
     <Layout>
-      <div className="flex-1 flex flex-col pt-12 pb-8 px-6 bg-background">
+      <div className="flex-1 flex flex-col pt-12 pb-8 px-6 bg-background overflow-y-auto">
         <header className="mb-8 text-center space-y-3">
           <div className="mx-auto w-14 h-14 rounded-2xl border border-sky-500/20 bg-sky-500/10 flex items-center justify-center">
             <CalendarDays className="w-6 h-6 text-sky-600" />
@@ -282,12 +253,28 @@ export default function WeeklyPlanPage() {
 
           <div className="flex justify-center">
             <span className="text-xs px-3 py-1 rounded-full border border-border bg-card text-muted-foreground">
-              {status}
+              {weeklyPlanStatus}
             </span>
           </div>
         </header>
 
         <div className="space-y-6 max-w-3xl mx-auto w-full">
+          {status === "loading" && (
+            <section className="rounded-2xl border border-border/50 bg-card p-5 text-sm text-muted-foreground">
+              Carregando plano semanal...
+            </section>
+          )}
+
+          {status === "error" && (
+            <section className="rounded-2xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive flex gap-3">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-medium">Erro</p>
+                <p className="mt-1">{errorMessage}</p>
+              </div>
+            </section>
+          )}
+
           {previousCycleFocus && (
             <section className="rounded-2xl border border-primary/20 bg-primary/5 p-5 space-y-2">
               <p className="text-xs font-medium uppercase tracking-widest text-primary/70">
@@ -306,8 +293,10 @@ export default function WeeklyPlanPage() {
 
             <textarea
               value={plan.change}
+              disabled={isBusy}
               onChange={(e) => updatePlan({ change: e.target.value })}
-              className="w-full min-h-[110px] rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground resize-none outline-none"
+              placeholder="Qual mudança precisa acontecer nesta semana?"
+              className="w-full min-h-[120px] rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground resize-none outline-none disabled:opacity-60"
             />
           </section>
 
@@ -316,10 +305,15 @@ export default function WeeklyPlanPage() {
               2. Provas da semana
             </h2>
 
+            <p className="text-sm text-muted-foreground">
+              Marcos concretos que mostram que a semana avançou.
+            </p>
+
             <div className="space-y-3">
               <div className="flex gap-2">
                 <input
                   value={newProof}
+                  disabled={isBusy}
                   onChange={(e) => setNewProof(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -328,12 +322,13 @@ export default function WeeklyPlanPage() {
                     }
                   }}
                   placeholder="Adicionar prova da semana"
-                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none"
+                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none disabled:opacity-60"
                 />
                 <button
                   type="button"
                   onClick={addProof}
-                  className="h-12 px-4 rounded-xl border border-primary/20 bg-primary/10 text-primary flex items-center justify-center gap-2"
+                  disabled={isBusy || !newProof.trim()}
+                  className="h-12 px-4 rounded-xl border border-primary/20 bg-primary/10 text-primary flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4" />
                   <span className="text-sm font-medium">Adicionar</span>
@@ -349,8 +344,9 @@ export default function WeeklyPlanPage() {
                     >
                       <button
                         type="button"
+                        disabled={isBusy}
                         onClick={() => toggleProof(index)}
-                        className={`h-9 w-9 shrink-0 rounded-full border flex items-center justify-center ${
+                        className={`h-9 w-9 shrink-0 rounded-full border flex items-center justify-center disabled:opacity-60 ${
                           proof.checked
                             ? "border-primary bg-primary text-primary-foreground"
                             : "border-border bg-card text-muted-foreground"
@@ -371,8 +367,9 @@ export default function WeeklyPlanPage() {
 
                       <button
                         type="button"
+                        disabled={isBusy}
                         onClick={() => removeProof(index)}
-                        className="shrink-0 p-2 rounded-lg text-muted-foreground hover:text-destructive"
+                        className="shrink-0 p-2 rounded-lg text-muted-foreground hover:text-destructive disabled:opacity-60"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -389,77 +386,72 @@ export default function WeeklyPlanPage() {
 
           <section className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
             <h2 className="text-lg font-serif text-foreground">
-              3. Distribuir na semana
-            </h2>
-
-            <div className="rounded-2xl border border-border/40 bg-background p-4 space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={goToPreviousWeekDay}
-                  className="h-11 w-11 rounded-xl border border-border bg-card flex items-center justify-center text-muted-foreground"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-
-                <div className="flex-1 text-center">
-                  <p className="text-2xl font-serif text-foreground">
-                    {selectedDayLabel}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={goToNextWeekDay}
-                  className="h-11 w-11 rounded-xl border border-border bg-card flex items-center justify-center text-muted-foreground"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
-
-              <input
-                value={plan[selectedDay]}
-                onChange={(e) =>
-                  updatePlan({
-                    [selectedDay]: e.target.value,
-                  } as Partial<WeeklyPlan>)
-                }
-                placeholder="Ex: Corpo + trabalho"
-                className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground outline-none"
-              />
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-            <h2 className="text-lg font-serif text-foreground">
-              4. O que pode te derrubar nesta semana?
+              3. O que pode te derrubar nesta semana?
             </h2>
 
             <textarea
               value={plan.risks}
+              disabled={isBusy}
               onChange={(e) => updatePlan({ risks: e.target.value })}
-              className="w-full min-h-[110px] rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground resize-none outline-none"
+              placeholder="Liste riscos, armadilhas ou padrões que podem atrapalhar."
+              className="w-full min-h-[110px] rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground resize-none outline-none disabled:opacity-60"
             />
           </section>
 
           <section className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
             <h2 className="text-lg font-serif text-foreground">
-              5. O que você fará quando isso acontecer?
+              4. O que você fará quando isso acontecer?
             </h2>
 
             <textarea
               value={plan.prevention}
+              disabled={isBusy}
               onChange={(e) => updatePlan({ prevention: e.target.value })}
-              className="w-full min-h-[110px] rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground resize-none outline-none"
+              placeholder="Defina respostas simples para quando os riscos aparecerem."
+              className="w-full min-h-[110px] rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground resize-none outline-none disabled:opacity-60"
             />
+          </section>
+
+          <section className="sticky bottom-4 rounded-2xl border border-border/50 bg-card/95 backdrop-blur p-4 shadow-lg">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm">
+                {status === "saving" && (
+                  <p className="text-muted-foreground">Salvando...</p>
+                )}
+
+                {status === "saved" && !dirty && (
+                  <p className="text-primary">Salvo no Supabase.</p>
+                )}
+
+                {dirty && status !== "saving" && (
+                  <p className="text-muted-foreground">
+                    Existem alterações não salvas.
+                  </p>
+                )}
+
+                {status === "idle" && !dirty && (
+                  <p className="text-muted-foreground">
+                    Nenhuma alteração pendente.
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={savePlan}
+                disabled={isBusy || !dirty}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {status === "saving" ? "Salvando..." : "Salvar plano"}
+              </button>
+            </div>
           </section>
 
           <div className="pt-2 flex justify-end">
             <button
               type="button"
-              onClick={() => {
-                window.location.href = `${import.meta.env.BASE_URL}fechamento-semanal`;
-              }}
+              onClick={goToWeeklyClosing}
               className={`text-xs px-3 py-2 rounded-full border ${
                 isSaturday
                   ? "border-primary/30 bg-primary/10 text-primary"
