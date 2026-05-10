@@ -99,8 +99,13 @@ export default function WeeklyPlanPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadPlan = async () => {
-      setStatus("loading");
+    const loadPlan = async (silent = false) => {
+      if (dirty) return;
+
+      if (!silent) {
+        setStatus("loading");
+      }
+
       setErrorMessage("");
 
       try {
@@ -147,10 +152,25 @@ export default function WeeklyPlanPage() {
 
     loadPlan();
 
+    const handleFocus = () => {
+      loadPlan(true);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadPlan(true);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [weekKey, previousWeekKey]);
+  }, [weekKey, previousWeekKey, dirty]);
 
   const updatePlan = (patch: Partial<WeeklyPlan>) => {
     setPlan((prev) => ({
