@@ -33,21 +33,24 @@ export default function AuthPage() {
 
         if (error) throw error;
 
-        setMessage("Entrando...");
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-        });
-
-        if (error) throw error;
-
-        if (data.session) {
-          setMessage("Conta criada e login realizado.");
-        } else {
-          setMessage("Conta criada. Agora volte e faça login.");
-        }
+        window.location.href = "/";
+        return;
       }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.session) {
+        window.location.href = "/";
+        return;
+      }
+
+      setMessage("Conta criada. Confirme seu email e depois faça login.");
+      setMode("login");
     } catch (error: any) {
       setMessage(error?.message || "Não foi possível continuar.");
     } finally {
