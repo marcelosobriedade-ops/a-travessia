@@ -1,3 +1,55 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --background: 43 25% 95%;
+  --foreground: 40 4% 23%;
+  --border: 43 25% 88%;
+  --input: 43 25% 88%;
+  --ring: 33 16% 48%;
+  --card: 43 30% 98%;
+  --card-foreground: 40 4% 23%;
+  --primary: 33 16% 48%;
+  --primary-foreground: 43 30% 98%;
+  --muted: 43 25% 90%;
+  --muted-foreground: 40 4% 45%;
+  --accent: 120 10% 85%;
+  --accent-foreground: 40 4% 23%;
+  --destructive: 0 40% 50%;
+  --destructive-foreground: 0 0% 100%;
+}
+
+.theme-candle {
+  --background: 28 38% 9%;
+  --foreground: 38 35% 80%;
+  --border: 28 25% 18%;
+  --input: 28 25% 18%;
+  --ring: 38 50% 45%;
+  --card: 28 32% 12%;
+  --card-foreground: 38 35% 80%;
+  --primary: 38 55% 52%;
+  --primary-foreground: 28 38% 9%;
+  --muted: 28 25% 15%;
+  --muted-foreground: 38 18% 58%;
+  --accent: 38 28% 20%;
+  --accent-foreground: 38 35% 80%;
+  --destructive: 0 40% 42%;
+  --destructive-foreground: 0 0% 100%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
