@@ -100,8 +100,7 @@ export default function WeeklyPlanPage() {
     let cancelled = false;
 
     const loadPlan = async (silent = false) => {
-      if (dirty) return;
-
+      if (dirty && !silent) return;
       if (!silent) {
         setStatus("loading");
       }
