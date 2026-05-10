@@ -77,7 +77,17 @@ function getPreviousWeekKey(weekKey: string) {
 function normalizeWeeklyPlan(value: any): WeeklyPlan {
   return {
     ...EMPTY_WEEKLY_PLAN,
-    ...(value || {}),
+    change: value?.change ?? "",
+    proofs: value?.proofs ?? "",
+    risks: value?.risks ?? "",
+    prevention: value?.prevention ?? "",
+    sunday: value?.sunday ?? "",
+    monday: value?.monday ?? "",
+    tuesday: value?.tuesday ?? "",
+    wednesday: value?.wednesday ?? "",
+    thursday: value?.thursday ?? "",
+    friday: value?.friday ?? "",
+    saturday: value?.saturday ?? "",
   };
 }
 
@@ -173,7 +183,7 @@ export default function WeeklyPlanPage() {
           {
             week_key: weekKey,
             user_id: userId,
-            plan: plan,
+            plan,
           },
           {
             onConflict: "user_id,week_key",
