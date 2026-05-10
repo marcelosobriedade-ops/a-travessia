@@ -19,26 +19,51 @@ import { AuthGate } from "./components/auth-gate";
 function App() {
   return (
     <Switch>
-      {/* ROTA LIVRE */}
       <Route path="/auth" component={AuthPage} />
 
-      {/* ROTAS PROTEGIDAS */}
       <Route>
         <AuthGate>
           <Switch>
             <Route path="/" component={HomePage} />
+
             <Route path="/sos" component={SosPage} />
+
             <Route path="/history" component={HistoryPage} />
+            <Route path="/historico" component={HistoryPage} />
+
             <Route path="/settings" component={SettingsPage} />
+            <Route path="/ajustes" component={SettingsPage} />
+
             <Route path="/tasks" component={TasksPage} />
+            <Route path="/tarefas" component={TasksPage} />
+
             <Route path="/habits" component={HabitsPage} />
+            <Route path="/habitos" component={HabitsPage} />
+
             <Route path="/financial" component={FinancialPage} />
+            <Route path="/financeiro" component={FinancialPage} />
+            <Route path="/financas" component={FinancialPage} />
+            <Route path="/finanças" component={FinancialPage} />
+
             <Route path="/people" component={PeoplePage} />
+            <Route path="/pessoas" component={PeoplePage} />
+
             <Route path="/emotions" component={EmotionsPage} />
+            <Route path="/emocoes" component={EmotionsPage} />
+
             <Route path="/morning" component={MorningPage} />
+            <Route path="/manha" component={MorningPage} />
+            <Route path="/manhã" component={MorningPage} />
+
             <Route path="/evening" component={EveningPage} />
+            <Route path="/noite" component={EveningPage} />
+
             <Route path="/weekly-plan" component={WeeklyPlanPage} />
+            <Route path="/plano-semanal" component={WeeklyPlanPage} />
+
             <Route path="/weekly-closing" component={WeeklyClosingPage} />
+            <Route path="/fechamento-semanal" component={WeeklyClosingPage} />
+
             <Route component={NotFound} />
           </Switch>
         </AuthGate>
