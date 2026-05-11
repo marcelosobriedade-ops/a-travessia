@@ -38,18 +38,18 @@ export const EMPTY_WEEKLY_META: WeeklyMetaRecord = {
   closing: {},
 };
 
-export async function getCurrentUserId() {
+export async function getCurrentUserId(): Promise<string | null> {
   const {
-    data: { session },
+    data: { user },
     error,
-  } = await supabase.auth.getSession();
+  } = await supabase.auth.getUser();
 
-  if (error) throw error;
-  if (!session?.user?.id) {
-    throw new Error("Usuário não autenticado.");
+  if (error) {
+    console.error("Erro ao obter usuário atual:", error);
+    return null;
   }
 
-  return session.user.id;
+  return user?.id ?? null;
 }
 
 export async function getDailyRecord(userId: string, dateKey: string) {
