@@ -23,7 +23,7 @@ function parseProofs(proofs: string): ProofItem[] {
   if (!proofs?.trim()) return [];
 
   return proofs
-    .split("\n")
+    .split("\\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => ({
@@ -35,7 +35,7 @@ function parseProofs(proofs: string): ProofItem[] {
 function serializeProofs(items: ProofItem[]) {
   return items
     .map((item) => `${item.checked ? "[x]" : "[ ]"} ${item.text}`)
-    .join("\n");
+    .join("\\n");
 }
 
 function normalizeWeeklyPlan(value: any): WeeklyPlan {
@@ -128,7 +128,7 @@ export default function WeeklyPlanPage() {
 
       console.log("SALVANDO PLANO:", cleanPlan);
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("weekly_meta")
         .upsert(
           {
@@ -140,15 +140,11 @@ export default function WeeklyPlanPage() {
           {
             onConflict: "user_id,week_key",
           },
-        )
-        .select("plan")
-        .maybeSingle();
+        );
 
       if (error) throw error;
 
-      const savedPlan = data?.plan ? normalizeWeeklyPlan(data.plan) : cleanPlan;
-
-      setPlan(savedPlan);
+      setPlan(cleanPlan);
       setDirty(false);
       setStatus("saved");
       setMessage("Salvo no Supabase.");
@@ -364,5 +360,26 @@ export default function WeeklyPlanPage() {
         </div>
       </div>
     </Layout>
+  );
+}
+
+function QuickLink({
+  href,
+  label,
+  icon,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <a href={href}>
+      <div className="rounded-[22px] border border-border/50 bg-card px-2 py-3 text-center shadow-sm cursor-pointer">
+        <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+          {icon}
+        </div>
+        <p className="text-xs text-foreground leading-tight">{label}</p>
+      </div>
+    </a>
   );
 }
