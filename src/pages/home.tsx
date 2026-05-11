@@ -85,7 +85,7 @@ function parseProofs(proofs: string): ProofItem[] {
   if (!proofs?.trim()) return [];
 
   return proofs
-    .split("\n")
+    .split("\\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
@@ -383,30 +383,21 @@ export default function Home() {
   };
 
   const activateNightMode = () => {
-    window.localStorage.setItem(
-      "planner-selected-date",
-      JSON.stringify(dateKey),
-    );
+    window.localStorage.setItem("planner-selected-date", `"${dateKey}"`);
     window.localStorage.setItem("planner-appearance", "candle");
     document.documentElement.classList.add("theme-candle");
     window.location.href = `${import.meta.env.BASE_URL}noite`;
   };
 
   const activateDayMode = () => {
-    window.localStorage.setItem(
-      "planner-selected-date",
-      JSON.stringify(dateKey),
-    );
+    window.localStorage.setItem("planner-selected-date", `"${dateKey}"`);
     window.localStorage.removeItem("planner-appearance");
     document.documentElement.classList.remove("theme-candle");
     window.location.href = `${import.meta.env.BASE_URL}manha`;
   };
 
   const goToWeeklyClosing = () => {
-    window.localStorage.setItem(
-      "planner-selected-date",
-      JSON.stringify(dateKey),
-    );
+    window.localStorage.setItem("planner-selected-date", `"${dateKey}"`);
     window.location.href = `${import.meta.env.BASE_URL}fechamento-semanal`;
   };
 
