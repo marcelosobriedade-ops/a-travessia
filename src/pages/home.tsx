@@ -225,4 +225,690 @@ export default function Home() {
 
       const [daily, weeklyMetaResult, weeklyPlanResult] = await Promise.all([
         getDailyRecord(uid, dateKey),
-        
+        getWeeklyMeta(uid, weekKey),
+        supabase
+          .from("weekly_meta")
+          .select("plan")
+          .eq("user_id", uid)
+          .eq("week_key", weekKey)
+          .maybeSingle(),
+      ]);
+
+      if (weeklyPlanResult.error) throw weeklyPlanResult.error;
+
+      setMorningRitual(normalizeMorning(daily.morning));
+      setEmotions(normalizeEmotions(daily.emotions));
+      setTasks(normalizeTasks(daily.tasks));
+      setDayClosed(Boolean(daily.closed));
+
+      setWeekVirtue(
+        typeof weeklyMetaResult?.virtue === "string"
+          ? weeklyMetaResult.virtue
+          : "",
+      );
+
+      setPreviousCycleFocus(
+        typeof weeklyMetaResult?.closing?.nextFocus === "string"
+          ? weeklyMetaResult.closing.nextFocus.trim()
+          : "",
+      );
+
+      setWeeklyPlan(
+        weeklyPlanResult.data?.plan
+          ? normalizeWeeklyPlan(weeklyPlanResult.data.plan)
+          : EMPTY_WEEKLY_PLAN,
+      );
+
+      setStatus("ready");
+    } catch (error: any) {
+      console.error("Erro ao carregar Home:", error);
+      setErrorMessage(error?.message || "Não foi possível carregar a Home.");
+      setStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (cancelled) return;
+      await loadHomeData(false);
+    };
+
+    run();
+
+    const handleFocus = () => {
+      loadHomeData(true);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadHomeData(true);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [dateKey, weekKey]);
+
+  const weeklyPlanStatus = getWeeklyPlanStatus(weeklyPlan);
+  const stoicQuote = getStoicQuoteByDate(dateKey);
+
+  const proofsList = parseProofs(weeklyPlan.proofs);
+  const totalProofs = proofsList.length;
+  const completedProofs = proofsList.filter((proof) => proof.checked).length;
+
+  const completedTodayTasks = tasks.filter((t) => t.status === "done").length;
+  const criticalTasks = tasks.filter((t) => t.status === "critical");
+  const pendingTasks = tasks.filter((t) => t.status === "todo");
+
+  const filledPriorities = (morningRitual.priorities || []).filter((item) =>
+    item?.trim(),
+  );
+
+  const primaryPriority = filledPriorities[0]?.trim() || "";
+
+  const today = new Date(dateKey + "T12:00:00");
+  const day = today.getDay();
+  const isSunday = day === 0;
+  const isSaturday = isEndOfWeek(dateKey);
+
+  const todayWeeklyFocus =
+    [
+      weeklyPlan.sunday,
+      weeklyPlan.monday,
+      weeklyPlan.tuesday,
+      weeklyPlan.wednesday,
+      weeklyPlan.thursday,
+      weeklyPlan.friday,
+      weeklyPlan.saturday,
+    ][day] || "";
+
+  const defaultTrailStep =
+    criticalTasks.length > 0
+      ? `Tarefa crítica: ${criticalTasks[0].title || "Sem título"}`
+      : pendingTasks.length > 0
+        ? `Próximo passo: ${pendingTasks[0].title || "Sem título"}`
+        : todayWeeklyFocus
+          ? `Hoje: ${todayWeeklyFocus}`
+          : completedTodayTasks > 0
+            ? `${completedTodayTasks} tarefa(s) concluída(s) hoje`
+            : "Defina o próximo passo do dia.";
+
+  const defaultTrailHint =
+    criticalTasks.length > 0
+      ? "O mais importante do dia já está sinalizado."
+      : pendingTasks.length > 0
+        ? "A trilha do dia começa pela primeira tarefa pendente."
+        : todayWeeklyFocus
+          ? `Foco herdado da semana: ${todayWeeklyFocus}`
+          : "Comece pequeno, mas comece.";
+
+  const isSurvivalMode = morningRitual.mode === "survival";
+
+  const survivalEssentialText =
+    primaryPriority ||
+    todayWeeklyFocus ||
+    weeklyPlan.change?.trim() ||
+    "Hoje, só o essencial.";
+
+  const nextTrailStep = isSurvivalMode
+    ? survivalEssentialText
+    : defaultTrailStep;
+
+  const nextTrailHint = isSurvivalMode
+    ? "Menos peso. Mais cuidado. Faça só o que for possível."
+    : defaultTrailHint;
+
+  const goToPreviousDay = () => {
+    const d = new Date(dateKey + "T00:00:00");
+    d.setDate(d.getDate() - 1);
+    setDateKey(d.toISOString().slice(0, 10));
+  };
+
+  const goToNextDay = () => {
+    const d = new Date(dateKey + "T00:00:00");
+    d.setDate(d.getDate() + 1);
+    setDateKey(d.toISOString().slice(0, 10));
+  };
+
+  const goToToday = () => {
+    setDateKey(getCurrentDateKey());
+  };
+
+  const activateNightMode = () => {
+    window.localStorage.setItem("planner-selected-date", `"${dateKey}"`);
+    window.localStorage.setItem("planner-appearance", "candle");
+    document.documentElement.classList.add("theme-candle");
+    window.location.href = `${import.meta.env.BASE_URL}noite`;
+  };
+
+  const activateDayMode = () => {
+    window.localStorage.setItem("planner-selected-date", `"${dateKey}"`);
+    window.localStorage.removeItem("planner-appearance");
+    document.documentElement.classList.remove("theme-candle");
+    window.location.href = `${import.meta.env.BASE_URL}manha`;
+  };
+
+  const goToWeeklyClosing = () => {
+    window.localStorage.setItem("planner-selected-date", `"${dateKey}"`);
+    window.location.href = `${import.meta.env.BASE_URL}fechamento-semanal`;
+  };
+
+  const handleCloseDay = async () => {
+    if (!userId) {
+      setStatus("error");
+      setErrorMessage("Usuário não autenticado. Faça login novamente.");
+      return;
+    }
+
+    setSavingClosed(true);
+    setErrorMessage("");
+
+    try {
+      await saveDailyRecord(userId, dateKey, { closed: true });
+      setDayClosed(true);
+      setShowCloseSuccess(true);
+      setTimeout(() => setShowCloseSuccess(false), 2500);
+    } catch (error: any) {
+      console.error("Erro ao encerrar dia:", error);
+      setStatus("error");
+      setErrorMessage(error?.message || "Erro ao encerrar dia.");
+    } finally {
+      setSavingClosed(false);
+    }
+  };
+
+  const progressPercent =
+    totalProofs > 0 ? Math.round((completedProofs / totalProofs) * 100) : 0;
+
+  const isSelectedDateToday = dateKey === getCurrentDateKey();
+  const showMorningFirst = !isSelectedDateToday || currentHour < 17;
+
+  const activePeriod: Period = getCurrentPeriod(currentHour);
+
+  const activeEmotionValue =
+    activePeriod === "morning"
+      ? morningRitual.feeling || null
+      : (emotions[activePeriod]?.emotion ?? null);
+
+  const activeEmotion =
+    FEELING_OPTIONS.find((item) => item.value === activeEmotionValue) ?? null;
+
+  const shouldHighlightSos = isLowState(activeEmotion?.value) || isSurvivalMode;
+
+  const sosTitle = isLowState(activeEmotion?.value)
+    ? "Apoio agora"
+    : "Modo sobrevivência";
+
+  const sosMessage = isLowState(activeEmotion?.value)
+    ? "Seu estado pede menos peso e mais cuidado."
+    : "Hoje o app vai te mostrar só o essencial.";
+
+  return (
+    <Layout>
+      <div className="flex-1 bg-background px-4 pt-6 pb-5">
+        <div className="mx-auto max-w-md">
+          <header className="mb-5 text-center">
+            <div className="mb-2 flex items-center justify-center gap-3 text-sm">
+              <button
+                onClick={goToPreviousDay}
+                className="rounded-full px-2 py-1 text-muted-foreground"
+              >
+                ←
+              </button>
+              <button
+                onClick={goToToday}
+                className="rounded-full px-2 py-1 text-primary"
+              >
+                Hoje
+              </button>
+              <button
+                onClick={goToNextDay}
+                className="rounded-full px-2 py-1 text-muted-foreground"
+              >
+                →
+              </button>
+            </div>
+
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              {new Date(dateKey + "T00:00:00").toLocaleDateString("pt-BR", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+
+            <h1 className="mt-2 font-serif text-4xl text-foreground">
+              A Travessia
+            </h1>
+
+            {weekVirtue?.trim() && (
+              <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                — {weekVirtue.trim()}
+              </p>
+            )}
+
+            {activeEmotion && (
+              <div className="mt-3 flex justify-center">
+                <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+                  <span>{activeEmotion.emoji}</span>
+                  <span>{activeEmotion.label}</span>
+                </div>
+              </div>
+            )}
+          </header>
+
+          {status === "loading" && (
+            <section className="mb-4 rounded-[24px] border border-border/50 bg-card px-4 py-4 text-sm text-muted-foreground shadow-sm">
+              Carregando dados do Supabase...
+            </section>
+          )}
+
+          {status === "error" && (
+            <section className="mb-4 rounded-[24px] border border-destructive/30 bg-destructive/10 px-4 py-4 text-sm text-destructive shadow-sm">
+              <div className="flex gap-3">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-medium">Erro ao carregar dados</p>
+                  <p className="mt-1">{errorMessage}</p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {shouldHighlightSos && (
+            <section className="mb-4 rounded-[28px] border border-primary/20 bg-primary/5 p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <HeartPulse className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium uppercase tracking-widest text-primary/70">
+                    {sosTitle}
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">{sosMessage}</p>
+                </div>
+
+                <Link href="/sos">
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+                  >
+                    SOS
+                  </button>
+                </Link>
+              </div>
+            </section>
+          )}
+
+          <section className="mb-4 rounded-[28px] border border-border/50 bg-card px-5 py-5 shadow-sm">
+            <p className="text-sm text-primary">Hoje</p>
+
+            <p className="mt-2 font-serif text-3xl leading-none text-foreground">
+              {new Date(dateKey + "T00:00:00").toLocaleDateString("pt-BR", {
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+              {stoicQuote ? stoicQuote.quote : "Um passo de cada vez"}
+            </p>
+
+            <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              — {stoicQuote ? stoicQuote.author : "A Travessia"}
+            </p>
+          </section>
+
+          {isSunday && (
+            <section className="mb-4 rounded-[28px] border border-primary/20 bg-primary/5 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-widest text-primary/70">
+                    Abertura da semana
+                  </p>
+
+                  <p className="mt-2 font-serif text-xl leading-snug text-foreground">
+                    Hoje é dia de definir a direção dos próximos 7 dias.
+                  </p>
+
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Abra o plano semanal, escolha a mudança da semana e
+                    distribua o que vai sustentar este novo ciclo.
+                  </p>
+
+                  {previousCycleFocus && (
+                    <div className="mt-3 rounded-2xl border border-border/50 bg-background px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                        Foco trazido do ciclo anterior
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {previousCycleFocus}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <Link href="/plano-semanal">
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+                  >
+                    Abrir
+                  </button>
+                </Link>
+              </div>
+            </section>
+          )}
+
+          {isSaturday && (
+            <section className="mb-4 rounded-[28px] border border-primary/20 bg-primary/5 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-widest text-primary/70">
+                    Fechamento da semana
+                  </p>
+                  <p className="mt-2 font-serif text-xl text-foreground leading-snug">
+                    Hoje é dia de encerrar o ciclo.
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Reúna o que foi vivido, veja o que avançou e escolha o que
+                    leva para a próxima semana.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={goToWeeklyClosing}
+                  className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/15 transition-colors"
+                >
+                  Encerrar
+                </button>
+              </div>
+            </section>
+          )}
+
+          {isSurvivalMode ? (
+            <>
+              <section className="mb-4 rounded-[28px] border border-border/50 bg-card p-4 shadow-sm">
+                <p className="text-xs font-medium uppercase tracking-widest text-primary/70">
+                  Ritmo do dia
+                </p>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={activateDayMode}
+                    className="flex flex-col items-center justify-center rounded-[22px] border border-border/40 bg-background px-3 py-4 text-center transition-colors hover:bg-muted/30"
+                  >
+                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <SunMedium className="h-6 w-6" />
+                    </div>
+                    <p className="text-lg font-serif text-foreground">Manhã</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={activateNightMode}
+                    className="flex flex-col items-center justify-center rounded-[22px] border border-border/40 bg-background px-3 py-4 text-center transition-colors hover:bg-muted/30"
+                  >
+                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Flame className="h-6 w-6" />
+                    </div>
+                    <p className="text-lg font-serif text-foreground">Noite</p>
+                  </button>
+                </div>
+              </section>
+
+              <section className="mb-4 rounded-[24px] border border-border/50 bg-card px-4 py-4 shadow-sm">
+                <p className="text-xs font-medium uppercase tracking-widest text-primary/70">
+                  Hoje, só o essencial
+                </p>
+                <p className="mt-3 text-base text-foreground">
+                  {survivalEssentialText}
+                </p>
+              </section>
+            </>
+          ) : (
+            <>
+              <div className="mb-4 grid grid-cols-[1.45fr_1fr] gap-3 items-stretch">
+                <Link href="/plano-semanal">
+                  <section className="h-full cursor-pointer rounded-[30px] border border-border/50 bg-card p-4 shadow-sm">
+                    <div className="flex gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                        <CalendarDays className="h-6 w-6 text-primary" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-primary">
+                          Mudança da semana
+                        </p>
+
+                        <p className="mt-2 font-serif text-3xl leading-tight text-foreground">
+                          {weeklyPlan.change?.trim() ||
+                            "Nenhuma mudança definida ainda"}
+                        </p>
+
+                        <div className="mt-3 inline-flex rounded-full border border-border/50 bg-background px-3 py-1 text-xs text-muted-foreground">
+                          {weeklyPlanStatus}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </Link>
+
+                <section className="h-full rounded-[30px] border border-border/50 bg-card p-4 shadow-sm">
+                  <div className="flex h-full flex-col justify-between gap-2">
+                    {showMorningFirst ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={activateDayMode}
+                          className="flex flex-1 flex-col items-center justify-center rounded-[22px] border border-transparent px-3 py-2 text-center hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <SunMedium className="h-6 w-6" />
+                          </div>
+                          <p className="text-lg font-serif text-foreground">
+                            Manhã
+                          </p>
+                        </button>
+
+                        <div className="h-px bg-border/40" />
+
+                        <button
+                          type="button"
+                          onClick={activateNightMode}
+                          className="flex flex-1 flex-col items-center justify-center rounded-[22px] border border-transparent px-3 py-2 text-center hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Flame className="h-6 w-6" />
+                          </div>
+                          <p className="text-lg font-serif text-foreground">
+                            Noite
+                          </p>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={activateNightMode}
+                          className="flex flex-1 flex-col items-center justify-center rounded-[22px] border border-transparent px-3 py-2 text-center hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Flame className="h-6 w-6" />
+                          </div>
+                          <p className="text-lg font-serif text-foreground">
+                            Noite
+                          </p>
+                        </button>
+
+                        <div className="h-px bg-border/40" />
+
+                        <button
+                          type="button"
+                          onClick={activateDayMode}
+                          className="flex flex-1 flex-col items-center justify-center rounded-[22px] border border-transparent px-3 py-2 text-center hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <SunMedium className="h-6 w-6" />
+                          </div>
+                          <p className="text-lg font-serif text-foreground">
+                            Manhã
+                          </p>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </section>
+              </div>
+
+              <section className="mb-4 rounded-[28px] border border-border/50 bg-card p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-foreground">Marcos da semana</p>
+                    <p className="mt-1 text-3xl font-serif text-foreground">
+                      {totalProofs > 0
+                        ? `${completedProofs} de ${totalProofs}`
+                        : "0 de 0"}
+                    </p>
+                  </div>
+
+                  <div className="w-[48%]">
+                    <div className="h-12 rounded-2xl border border-border/50 bg-background p-1">
+                      <div
+                        className="h-full rounded-xl bg-primary/60 transition-all"
+                        style={{
+                          width: `${totalProofs > 0 ? Math.max(progressPercent, completedProofs > 0 ? 18 : 0) : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="mb-4 grid grid-cols-4 gap-2">
+                <QuickLink
+                  href="/pessoas"
+                  label="Pessoas"
+                  icon={<Users className="h-5 w-5" />}
+                />
+                <QuickLink
+                  href="/habitos"
+                  label="Hábitos"
+                  icon={<Repeat className="h-5 w-5" />}
+                />
+                <QuickLink
+                  href="/financeiro"
+                  label="Finanças"
+                  icon={<Wallet className="h-5 w-5" />}
+                />
+                <QuickLink
+                  href="/emocoes"
+                  label="Emoções"
+                  icon={<Smile className="h-5 w-5" />}
+                />
+              </div>
+
+              {filledPriorities.length > 0 && (
+                <section className="mb-4 rounded-[24px] border border-border/50 bg-card px-4 py-4 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-widest text-primary/70">
+                    Prioridade do dia
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {filledPriorities.map((priority, index) => (
+                      <div
+                        key={`${priority}-${index}`}
+                        className="rounded-full border border-border/50 bg-background px-3 py-1.5 text-sm text-foreground"
+                      >
+                        {priority}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+
+          <Link href="/tasks">
+            <section className="mb-5 cursor-pointer rounded-[28px] border border-border/50 bg-card p-4 shadow-sm transition-transform hover:scale-[1.01]">
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                  <ChevronRight className="h-7 w-7 text-primary" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-primary">Trilha de hoje</p>
+
+                  <p className="mt-2 font-serif text-2xl leading-snug text-foreground">
+                    {nextTrailStep}
+                  </p>
+
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {nextTrailHint}
+                  </p>
+                </div>
+              </div>
+            </section>
+          </Link>
+
+          <div className="mt-3 space-y-3">
+            {showCloseSuccess && (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/10 px-4 py-2 text-sm text-primary">
+                <CheckCircle2 className="h-4 w-4" />
+                Dia encerrado com sucesso
+              </div>
+            )}
+
+            {dayClosed ? (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
+                <CheckCircle2 className="h-4 w-4" />
+                Dia encerrado
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleCloseDay}
+                disabled={savingClosed || !userId}
+                className="w-full rounded-2xl border border-primary/30 px-4 py-3 text-sm text-primary disabled:opacity-60"
+              >
+                {savingClosed ? "Encerrando..." : "Encerrar dia"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+function QuickLink({
+  href,
+  label,
+  icon,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <Link href={href}>
+      <div className="rounded-[22px] border border-border/50 bg-card px-2 py-3 text-center shadow-sm cursor-pointer">
+        <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+          {icon}
+        </div>
+        <p className="text-xs text-foreground leading-tight">{label}</p>
+      </div>
+    </Link>
+  );
+}
