@@ -38,6 +38,15 @@ export const EMPTY_WEEKLY_META: WeeklyMetaRecord = {
   closing: {},
 };
 
+function isValidUserId(userId: unknown): userId is string {
+  return (
+    typeof userId === "string" &&
+    userId.trim() !== "" &&
+    userId.trim().toLowerCase() !== "null" &&
+    userId.trim().toLowerCase() !== "undefined"
+  );
+}
+
 export async function getCurrentUserId(): Promise<string | null> {
   const {
     data: { user },
@@ -53,6 +62,13 @@ export async function getCurrentUserId(): Promise<string | null> {
 }
 
 export async function getDailyRecord(userId: string, dateKey: string) {
+  if (!isValidUserId(userId)) {
+    return {
+      date_key: dateKey,
+      ...EMPTY_DAILY_RECORD,
+    };
+  }
+
   const { data, error } = await supabase
     .from("daily_records")
     .select("*")
@@ -88,6 +104,10 @@ export async function saveDailyRecord(
   dateKey: string,
   patch: Partial<DailyRecord>,
 ) {
+  if (!isValidUserId(userId)) {
+    throw new Error("Usuário inválido para salvar daily_record.");
+  }
+
   const current = await getDailyRecord(userId, dateKey);
 
   const next = {
@@ -119,6 +139,8 @@ export async function saveDailyRecord(
 }
 
 export async function getUserHabits(userId: string) {
+  if (!isValidUserId(userId)) return [];
+
   const { data, error } = await supabase
     .from("user_habits")
     .select("habits")
@@ -131,6 +153,10 @@ export async function getUserHabits(userId: string) {
 }
 
 export async function saveUserHabits(userId: string, habits: any[]) {
+  if (!isValidUserId(userId)) {
+    throw new Error("Usuário inválido para salvar hábitos.");
+  }
+
   const { error } = await supabase.from("user_habits").upsert(
     {
       user_id: userId,
@@ -145,6 +171,10 @@ export async function saveUserHabits(userId: string, habits: any[]) {
 }
 
 export async function getWeeklyMeta(userId: string, weekKey: string) {
+  if (!isValidUserId(userId)) {
+    return EMPTY_WEEKLY_META;
+  }
+
   const { data, error } = await supabase
     .from("weekly_meta")
     .select("virtue, closing")
@@ -165,6 +195,10 @@ export async function saveWeeklyMeta(
   weekKey: string,
   patch: Partial<WeeklyMetaRecord>,
 ) {
+  if (!isValidUserId(userId)) {
+    throw new Error("Usuário inválido para salvar weekly_meta.");
+  }
+
   const current = await getWeeklyMeta(userId, weekKey);
 
   const next = {
