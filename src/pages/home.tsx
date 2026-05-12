@@ -223,6 +223,19 @@ export default function Home() {
       const uid = await getCurrentUserId();
       setUserId(uid);
 
+      if (!uid) {
+        setMorningRitual(EMPTY_MORNING_RITUAL);
+        setEmotions(defaultEmotionsState);
+        setTasks([]);
+        setWeeklyPlan(EMPTY_WEEKLY_PLAN);
+        setPreviousCycleFocus("");
+        setWeekVirtue("");
+        setDayClosed(false);
+        setErrorMessage("Você ainda não está autenticado. Entre em Ajustes para fazer login.");
+        setStatus("error");
+        return;
+      }
+
       const [daily, weeklyMetaResult, weeklyPlanResult] = await Promise.all([
         getDailyRecord(uid, dateKey),
         getWeeklyMeta(uid, weekKey),
@@ -404,7 +417,7 @@ export default function Home() {
   const handleCloseDay = async () => {
     if (!userId) {
       setStatus("error");
-      setErrorMessage("Usuário não autenticado. Faça login novamente.");
+      setErrorMessage("Usuário não autenticado. Vá em Ajustes e faça login.");
       return;
     }
 
