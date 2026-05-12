@@ -152,6 +152,19 @@ export default function Evening() {
         const uid = await getCurrentUserId();
         if (cancelled) return;
 
+        if (!uid) {
+          const legacyNight = getLegacyNightData(dateKey);
+
+          setUserId(null);
+          setStorageMode("local");
+          setRitual(legacyNight);
+          setWeeklyPlan(null);
+          setTodayWeeklyFocus("");
+          setPendingProofs([]);
+          setHasLoaded(true);
+          return;
+        }
+
         setUserId(uid);
         setStorageMode("supabase");
 
@@ -174,10 +187,7 @@ export default function Evening() {
         await loadWeeklyPlan(uid);
         setHasLoaded(true);
       } catch (error) {
-        console.warn(
-          "Sem usuário autenticado. Noite está usando armazenamento local.",
-          error,
-        );
+        console.error("Erro ao carregar noite:", error);
 
         if (cancelled) return;
 
