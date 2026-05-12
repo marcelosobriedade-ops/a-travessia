@@ -44,7 +44,9 @@ function normalizeWeeklyPlan(value: any): WeeklyPlan {
     change: typeof value?.change === "string" ? value.change : "",
     proofs: typeof value?.proofs === "string" ? value.proofs : "",
     risks: typeof value?.risks === "string" ? value.risks : "",
-    prevention: typeof value?.prevention === "string" ? value.prevention : "",
+    prevention: typeof value?.prevention === "string"
+      ? value.prevention
+      : "",
   };
 }
 
@@ -74,6 +76,14 @@ export default function WeeklyPlanPage() {
 
         const uid = await getCurrentUserId();
         setUserId(uid);
+
+        if (!uid) {
+          setPlan(EMPTY_WEEKLY_PLAN);
+          setDirty(false);
+          setStatus("error");
+          setMessage("Usuário não autenticado. Faça login novamente.");
+          return;
+        }
 
         const { data, error } = await supabase
           .from("weekly_meta")
@@ -383,3 +393,4 @@ function QuickLink({
     </a>
   );
 }
+</query>
