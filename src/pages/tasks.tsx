@@ -3,15 +3,7 @@ import { Header } from "@/components/header";
 import { Layout } from "@/components/layout";
 import { getCurrentDateKey } from "@/lib/date";
 import { Input } from "@/components/ui/input";
-import {
-  AlertTriangle,
-  Check,
-  ChevronDown,
-  Circle,
-  Plus,
-  Trash2,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Check, Circle, Plus, Trash2 } from "lucide-react";
 import {
   getCurrentUserId,
   getDailyRecord,
@@ -61,17 +53,25 @@ export default function Tasks() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔥 LOAD 100% SUPABASE
   useEffect(() => {
     const load = async () => {
       try {
         const uid = await getCurrentUserId();
+
+        if (!uid) {
+          setUserId(null);
+          setTasks([]);
+          setLoading(false);
+          return;
+        }
+
         setUserId(uid);
 
         const daily = await getDailyRecord(uid, dateKey);
         setTasks(normalizeTasks(daily.tasks));
       } catch (err) {
         console.error("Erro ao carregar tarefas:", err);
+        setTasks([]);
       } finally {
         setLoading(false);
       }
@@ -80,7 +80,6 @@ export default function Tasks() {
     load();
   }, [dateKey]);
 
-  // 🔥 SAVE 100% SUPABASE
   useEffect(() => {
     if (!userId || loading) return;
 
@@ -178,10 +177,10 @@ export default function Tasks() {
             <span>{task.title}</span>
 
             <div className="flex gap-2">
-              <button onClick={() => updateStatus(task.id, "done")}>
+              <button type="button" onClick={() => updateStatus(task.id, "done")}>
                 <Check />
               </button>
-              <button onClick={() => deleteTask(task.id)}>
+              <button type="button" onClick={() => deleteTask(task.id)}>
                 <Trash2 />
               </button>
             </div>
