@@ -47,13 +47,6 @@ export default function Settings() {
 
         if (daily.error) throw daily.error;
 
-        const weeklyPlans = await supabase
-          .from("weekly_plans")
-          .delete()
-          .eq("user_id", user.id);
-
-        if (weeklyPlans.error) throw weeklyPlans.error;
-
         const weeklyMeta = await supabase
           .from("weekly_meta")
           .delete()
