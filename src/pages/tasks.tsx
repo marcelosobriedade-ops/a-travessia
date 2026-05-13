@@ -4,6 +4,7 @@ import { Layout } from "@/components/layout";
 import { getCurrentDateKey } from "@/lib/date";
 import { Input } from "@/components/ui/input";
 import { Check, Circle, Plus, Trash2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import {
   getCurrentUserId,
   getDailyRecord,
@@ -54,37 +55,64 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     const load = async () => {
       try {
+        setLoading(true);
+
         const uid = await getCurrentUserId();
+
+        if (!mounted) return;
 
         if (!uid) {
           setUserId(null);
           setTasks([]);
-          setLoading(false);
           return;
         }
 
         setUserId(uid);
 
         const daily = await getDailyRecord(uid, dateKey);
-        setTasks(normalizeTasks(daily.tasks));
+
+        if (!mounted) return;
+
+        setTasks(normalizeTasks(daily?.tasks));
       } catch (err) {
         console.error("Erro ao carregar tarefas:", err);
+
+        if (!mounted) return;
+
         setTasks([]);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
     load();
+
+    return () => {
+      mounted = false;
+    };
   }, [dateKey]);
 
   useEffect(() => {
     if (!userId || loading) return;
 
+    let cancelled = false;
+
     const save = async () => {
       try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session || cancelled) {
+          return;
+        }
+
         await saveDailyRecord(userId, dateKey, { tasks });
       } catch (err) {
         console.error("Erro ao salvar tarefas:", err);
@@ -92,6 +120,10 @@ export default function Tasks() {
     };
 
     save();
+
+    return () => {
+      cancelled = true;
+    };
   }, [tasks, userId, loading, dateKey]);
 
   const addTask = (e: React.FormEvent) => {
@@ -143,11 +175,13 @@ export default function Tasks() {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Nova tarefa"
           />
+
           <Input
             type="time"
             value={time}
             onChange={(e) => setTime(e.target.value)}
           />
+
           <Input
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -172,15 +206,30 @@ export default function Tasks() {
         {tasks.map((task) => (
           <div
             key={task.id}
-            className="border p-3 rounded flex justify-between"
+            className="border p-3 rounded flex justify-between items-center"
           >
-            <span>{task.title}</span>
+            <div>
+              <p className="font-medium">{task.title}</p>
+
+              {(task.category || task.time) && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {[task.category, task.time].filter(Boolean).join(" • ")}
+                </p>
+              )}
+            </div>
 
             <div className="flex gap-2">
-              <button type="button" onClick={() => updateStatus(task.id, "done")}>
+              <button
+                type="button"
+                onClick={() => updateStatus(task.id, "done")}
+              >
                 <Check />
               </button>
-              <button type="button" onClick={() => deleteTask(task.id)}>
+
+              <button
+                type="button"
+                onClick={() => deleteTask(task.id)}
+              >
                 <Trash2 />
               </button>
             </div>
